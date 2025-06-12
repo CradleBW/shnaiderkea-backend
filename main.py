@@ -7,7 +7,6 @@ import requests
 
 app = FastAPI()
 
-# Настройка CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,7 +15,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Настройка Cloudinary
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
@@ -56,25 +54,30 @@ async def generate_image(
     image_upload = cloudinary.uploader.upload(image.file)
     image_url = image_upload.get("secure_url")
 
-    response = requests.post(
-        "https://api.replicate.com/v1/predictions",
-        headers={
-            "Authorization": f"Token {os.getenv('REPLICATE_API_TOKEN')}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "version": "d2f73565c889f8099632e7b7df6c5d45ecf55e57be0063c037f95a009409d3a3",
-            "input": {
-                "image": image_url,
-                "prompt": prompt,
-                "guidance_scale": 7.5,
-                "num_inference_steps": 30
+    debug_info = {"image_url": image_url, "prompt": prompt}
+
+    try:
+        response = requests.post(
+            "https://api.replicate.com/v1/predictions",
+            headers={
+                "Authorization": f"Token {os.getenv('REPLICATE_API_TOKEN')}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "version": "d2f73565c889f8099632e7b7df6c5d45ecf55e57be0063c037f95a009409d3a3",
+                "input": {
+                    "image": image_url,
+                    "prompt": prompt,
+                    "guidance_scale": 7.5,
+                    "num_inference_steps": 30
+                }
             }
-        }
-    )
+        )
 
-    if response.status_code != 201:
-        return {"error": "Ошибка генерации изображения", "details": response.json()}
+        debug_info["status_code"] = response.status_code
+        debug_info["replicate_response"] = response.json()
 
-    prediction = response.json()
-    return prediction
+        return debug_info
+
+    except Exception as e:
+        return {"error": str(e), "debug_info": debug_info}
