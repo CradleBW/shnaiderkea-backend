@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import cloudinary
 import cloudinary.uploader
 import os
+import requests
 
 app = FastAPI()
 
@@ -47,6 +48,33 @@ async def upload_material(
 def get_materials():
     return materials_db
 
-@app.get("/")
-def root():
-    return {"message": "ShnaiderKea backend работает"}
+@app.post("/api/generate")
+async def generate_image(
+    prompt: str = Form(...),
+    image: UploadFile = File(...)
+):
+    image_upload = cloudinary.uploader.upload(image.file)
+    image_url = image_upload.get("secure_url")
+
+    response = requests.post(
+        "https://api.replicate.com/v1/predictions",
+        headers={
+            "Authorization": f"Token {os.getenv('REPLICATE_API_TOKEN')}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "version": "d2f73565c889f8099632e7b7df6c5d45ecf55e57be0063c037f95a009409d3a3",
+            "input": {
+                "image": image_url,
+                "prompt": prompt,
+                "guidance_scale": 7.5,
+                "num_inference_steps": 30
+            }
+        }
+    )
+
+    if response.status_code != 201:
+        return {"error": "Ошибка генерации изображения", "details": response.json()}
+
+    prediction = response.json()
+    return prediction
